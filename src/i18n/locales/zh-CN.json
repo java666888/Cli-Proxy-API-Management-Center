@@ -671,7 +671,16 @@
     "plan_team": "Team",
     "plan_free": "Free",
     "plan_pro": "Pro 20x",
-    "plan_prolite": "Pro 5x"
+    "plan_prolite": "Pro 5x",
+    "overview_weekly_quota": "周额度总览",
+    "overview_code_review_weekly_quota": "周代码审查额度总览",
+    "overview_remaining": "未使用",
+    "overview_used": "已使用",
+    "overview_coverage": "已汇总 {{included}} / {{total}} 个凭证",
+    "overview_weekly_empty": "暂无周额度数据",
+    "overview_code_review_weekly_empty": "暂无周代码审查额度数据",
+    "sort_high_to_low": "额度高到低",
+    "sort_low_to_high": "额度低到高"
   },
   "gemini_cli_quota": {
     "title": "Gemini CLI 额度",
@@ -1361,7 +1370,10 @@
     "refresh_files": "刷新认证文件",
     "refresh_files_and_quota": "刷新认证文件&额度",
     "refresh_all_credentials": "刷新全部凭证",
-    "card_idle_hint": "请使用顶部“刷新全部凭证”按钮获取最新额度。"
+    "card_idle_hint": "请使用顶部“刷新全部凭证”按钮获取最新额度。",
+    "mock_codex_quota_on": "Codex Mock：已开启",
+    "mock_codex_quota_off": "Codex Mock 数据",
+    "mock_codex_quota_hint": "当前已启用本地 Mock 数据。Codex 分区会使用演示数据，方便验证总览、排序和显示全部。"
   },
   "system_info": {
     "title": "管理中心信息",

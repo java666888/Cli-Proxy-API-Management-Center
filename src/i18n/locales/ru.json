@@ -668,7 +668,16 @@
     "plan_team": "Team",
     "plan_free": "Free",
     "plan_pro": "Pro 20x",
-    "plan_prolite": "Pro 5x"
+    "plan_prolite": "Pro 5x",
+    "overview_weekly_quota": "Недельная квота",
+    "overview_code_review_weekly_quota": "Недельная квота code review",
+    "overview_remaining": "Осталось",
+    "overview_used": "Использовано",
+    "overview_coverage": "Сводка по {{included}} / {{total}} учётным данным",
+    "overview_weekly_empty": "Нет данных по недельной квоте",
+    "overview_code_review_weekly_empty": "Нет данных по недельной квоте code review",
+    "sort_high_to_low": "Квота: от большего к меньшему",
+    "sort_low_to_high": "Квота: от меньшего к большему"
   },
   "gemini_cli_quota": {
     "title": "Квота Gemini CLI",
@@ -1360,7 +1369,10 @@
     "refresh_files": "Обновить файлы авторизации",
     "refresh_files_and_quota": "Обновить файлы и квоты",
     "refresh_all_credentials": "Обновить все учётные данные",
-    "card_idle_hint": "Используйте кнопку «Обновить все учётные данные» сверху, чтобы загрузить актуальные данные по квотам."
+    "card_idle_hint": "Используйте кнопку «Обновить все учётные данные» сверху, чтобы загрузить актуальные данные по квотам.",
+    "mock_codex_quota_on": "Mock Codex: включён",
+    "mock_codex_quota_off": "Данные Mock Codex",
+    "mock_codex_quota_hint": "Режим mock включён. Раздел Codex использует локальные демонстрационные данные для проверки сводки, сортировки и режима показа всех карточек."
   },
   "system_info": {
     "title": "Информация о центре управления",

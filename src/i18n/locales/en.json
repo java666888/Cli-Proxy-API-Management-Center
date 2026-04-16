@@ -671,7 +671,16 @@
     "plan_team": "Team",
     "plan_free": "Free",
     "plan_pro": "Pro 20x",
-    "plan_prolite": "Pro 5x"
+    "plan_prolite": "Pro 5x",
+    "overview_weekly_quota": "Weekly quota",
+    "overview_code_review_weekly_quota": "Weekly code review quota",
+    "overview_remaining": "Remaining",
+    "overview_used": "Used",
+    "overview_coverage": "Aggregated {{included}} / {{total}} credentials",
+    "overview_weekly_empty": "No weekly quota data",
+    "overview_code_review_weekly_empty": "No weekly code review data",
+    "sort_high_to_low": "Quota high to low",
+    "sort_low_to_high": "Quota low to high"
   },
   "gemini_cli_quota": {
     "title": "Gemini CLI Quota",
@@ -1361,7 +1370,10 @@
     "refresh_files": "Refresh auth files",
     "refresh_files_and_quota": "Refresh files & quota",
     "refresh_all_credentials": "Refresh all credentials",
-    "card_idle_hint": "Use the top \"Refresh all credentials\" button to fetch the latest quota data."
+    "card_idle_hint": "Use the top \"Refresh all credentials\" button to fetch the latest quota data.",
+    "mock_codex_quota_on": "Mock Codex quota: on",
+    "mock_codex_quota_off": "Mock Codex quota",
+    "mock_codex_quota_hint": "Mock mode is active. The Codex section is using local demo data for overview, sorting, and show-all verification."
   },
   "system_info": {
     "title": "Management Center Info",

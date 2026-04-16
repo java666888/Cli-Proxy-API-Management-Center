@@ -13,6 +13,17 @@
   gap: $spacing-sm;
 }
 
+.pageHeaderTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
 .pageTitle {
   font-size: 28px;
   font-weight: 700;
@@ -24,6 +35,15 @@
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
+}
+
+.mockModeBanner {
+  padding: 10px 12px;
+  border-radius: $radius-md;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 26%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .headerActions {
@@ -169,7 +189,46 @@
   }
 }
 
+.sortToggle {
+  display: inline-flex;
+  gap: $spacing-xs;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+
+  @include mobile {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+
 .viewModeButton:global(.btn.btn-sm) {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+
+  &:hover:not(:disabled) {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--bg-hover) 72%, transparent);
+    color: var(--text-primary);
+  }
+
+  > span {
+    white-space: nowrap;
+  }
+
+  @include mobile {
+    flex: 1 1 0;
+  }
+}
+
+.sortButton:global(.btn.btn-sm) {
   padding: 8px 14px;
   border-radius: 999px;
   border-color: transparent;
@@ -205,6 +264,19 @@
   }
 }
 
+.sortButtonActive:global(.btn.btn-sm) {
+  background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  color: var(--text-primary);
+  box-shadow: 0 8px 18px -14px rgba(0, 0, 0, 0.35);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 22%, var(--bg-primary));
+    border-color: color-mix(in srgb, var(--primary-color) 34%, var(--border-color));
+    color: var(--text-primary);
+  }
+}
+
 .refreshAllButton:global(.btn.btn-sm) {
   padding-inline: 14px;
   border-radius: 999px;
@@ -234,6 +306,10 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+:global([data-theme='dark']) .sortToggle {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 :global([data-theme='dark']) .refreshAllButton:global(.btn.btn-sm) {
   background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
@@ -246,6 +322,154 @@
 }
 
 // 卡片渐变背景 — 基于 TYPE_COLORS light.bg 转 rgba
+.codexOverviewRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-md;
+  margin-bottom: $spacing-md;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.codexOverviewCard {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  border-radius: $radius-lg;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--border-color));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary)) 0%,
+      var(--bg-primary) 100%
+    );
+  box-shadow: 0 10px 30px -24px rgba(0, 0, 0, 0.4);
+}
+
+.codexOverviewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-sm;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+.codexOverviewTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.codexOverviewCoverage {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.codexOverviewBody {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+
+  @include mobile {
+    align-items: stretch;
+  }
+}
+
+.codexOverviewDonut {
+  position: relative;
+  flex: 0 0 104px;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      color-mix(in srgb, var(--success-color, #22c55e) 88%, white) 0 50%,
+      color-mix(in srgb, var(--danger-color, #ef4444) 86%, white) 50% 100%
+    );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 11px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  }
+}
+
+.codexOverviewDonutEmpty {
+  background: conic-gradient(color-mix(in srgb, var(--border-color) 72%, transparent) 0 100%);
+}
+
+.codexOverviewDonutInner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 72px;
+  height: 72px;
+  text-align: center;
+}
+
+.codexOverviewPercent {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.codexOverviewPercentLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.codexOverviewEmpty {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.codexOverviewStats {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.codexOverviewStat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding: 10px 12px;
+  border-radius: $radius-md;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+}
+
+.codexOverviewStatLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codexOverviewStatValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .claudeCard {
   background-image: linear-gradient(180deg,
       rgba(251, 236, 228, 0.18),

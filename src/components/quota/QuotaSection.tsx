@@ -3,13 +3,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNotificationStore, useQuotaStore, useThemeStore } from '@/stores';
-import type { AuthFileItem, ResolvedTheme } from '@/types';
+import type { AuthFileItem, CodexQuotaState, CodexQuotaWindow, ResolvedTheme } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
 import { QuotaCard } from './QuotaCard';
 import type { QuotaStatusState } from './QuotaCard';
@@ -24,9 +25,71 @@ type QuotaUpdater<T> = T | ((prev: T) => T);
 type QuotaSetter<T> = (updater: QuotaUpdater<T>) => void;
 
 type ViewMode = 'paged' | 'all';
+type CodexSortMode = 'remaining-desc' | 'remaining-asc';
 
 const MAX_ITEMS_PER_PAGE = 25;
-const MAX_SHOW_ALL_THRESHOLD = 30;
+const CODEX_WEEKLY_WINDOW_ID = 'weekly';
+const CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID = 'code-review-weekly';
+
+interface CodexOverviewSummary {
+  remainingPercent: number | null;
+  usedPercent: number | null;
+  includedCount: number;
+  totalCount: number;
+}
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
+
+const getCodexWindowById = (
+  quota: CodexQuotaState | undefined,
+  windowId: string
+): CodexQuotaWindow | null => {
+  if (quota?.status !== 'success') return null;
+  return quota.windows.find((window) => window.id === windowId) ?? null;
+};
+
+const getRemainingPercentFromUsed = (usedPercent: number | null | undefined): number | null => {
+  if (usedPercent === null || usedPercent === undefined || Number.isNaN(usedPercent)) {
+    return null;
+  }
+  return clampPercent(100 - clampPercent(usedPercent));
+};
+
+const buildCodexOverviewSummary = (
+  files: AuthFileItem[],
+  quotaByFile: Record<string, CodexQuotaState>,
+  windowId: string
+): CodexOverviewSummary => {
+  let includedCount = 0;
+  let remainingTotal = 0;
+
+  files.forEach((file) => {
+    const remainingPercent = getRemainingPercentFromUsed(
+      getCodexWindowById(quotaByFile[file.name], windowId)?.usedPercent
+    );
+    if (remainingPercent === null) return;
+
+    includedCount += 1;
+    remainingTotal += remainingPercent;
+  });
+
+  if (includedCount === 0) {
+    return {
+      remainingPercent: null,
+      usedPercent: null,
+      includedCount,
+      totalCount: files.length
+    };
+  }
+
+  const averageRemaining = remainingTotal / includedCount;
+  return {
+    remainingPercent: averageRemaining,
+    usedPercent: 100 - averageRemaining,
+    includedCount,
+    totalCount: files.length
+  };
+};
 
 interface QuotaPaginationState<T> {
   pageSize: number;
@@ -111,17 +174,60 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     Record<string, TState>
   >;
 
-  /* Removed useRef */
   const [columns, gridRef] = useGridColumns(380); // Min card width 380px matches SCSS
   const [viewMode, setViewMode] = useState<ViewMode>('paged');
-  const [showTooManyWarning, setShowTooManyWarning] = useState(false);
+  const [codexSortMode, setCodexSortMode] = useState<CodexSortMode>('remaining-desc');
 
   const filteredFiles = useMemo(() => files.filter((file) => config.filterFn(file)), [
     files,
     config
   ]);
-  const showAllAllowed = filteredFiles.length <= MAX_SHOW_ALL_THRESHOLD;
-  const effectiveViewMode: ViewMode = viewMode === 'all' && !showAllAllowed ? 'paged' : viewMode;
+  const { quota, loadQuota } = useQuotaLoader(config);
+  const codexQuota =
+    config.type === 'codex' ? (quota as unknown as Record<string, CodexQuotaState>) : null;
+  const isCodexSection = config.type === 'codex';
+
+  const hasCodexBootstrapData = useMemo(() => {
+    if (!isCodexSection || !codexQuota) return false;
+
+    return filteredFiles.some((file) => {
+      const fileQuota = codexQuota[file.name];
+      return Boolean(
+        getCodexWindowById(fileQuota, CODEX_WEEKLY_WINDOW_ID) ||
+          getCodexWindowById(fileQuota, CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID)
+      );
+    });
+  }, [codexQuota, filteredFiles, isCodexSection]);
+
+  const sortedFiles = useMemo(() => {
+    if (!isCodexSection || !codexQuota) return filteredFiles;
+
+    return filteredFiles
+      .map((file, index) => ({
+        file,
+        index,
+        remainingPercent: getRemainingPercentFromUsed(
+          getCodexWindowById(codexQuota[file.name], CODEX_WEEKLY_WINDOW_ID)?.usedPercent
+        )
+      }))
+      .sort((left, right) => {
+        const leftValue = left.remainingPercent;
+        const rightValue = right.remainingPercent;
+        const leftHasValue = leftValue !== null;
+        const rightHasValue = rightValue !== null;
+
+        if (leftHasValue && !rightHasValue) return -1;
+        if (!leftHasValue && rightHasValue) return 1;
+        if (!leftHasValue && !rightHasValue) return left.index - right.index;
+
+        const difference =
+          codexSortMode === 'remaining-desc'
+            ? (rightValue as number) - (leftValue as number)
+            : (leftValue as number) - (rightValue as number);
+        return difference !== 0 ? difference : left.index - right.index;
+      })
+      .map((entry) => entry.file);
+  }, [codexQuota, codexSortMode, filteredFiles, isCodexSection]);
 
   const {
     pageSize,
@@ -133,43 +239,57 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     goToNext,
     loading: sectionLoading,
     setLoading
-  } = useQuotaPagination(filteredFiles);
+  } = useQuotaPagination(sortedFiles);
 
-  useEffect(() => {
-    if (showAllAllowed) return;
-    if (viewMode !== 'all') return;
-
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setViewMode('paged');
-      setShowTooManyWarning(true);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [showAllAllowed, viewMode]);
+  const effectiveViewMode = viewMode;
 
   // Update page size based on view mode and columns
   useEffect(() => {
     if (effectiveViewMode === 'all') {
-      setPageSize(Math.max(1, filteredFiles.length));
+      setPageSize(Math.max(1, sortedFiles.length));
     } else {
       // Paged mode: 3 rows * columns, capped to avoid oversized pages.
       setPageSize(Math.min(columns * 3, MAX_ITEMS_PER_PAGE));
     }
-  }, [effectiveViewMode, columns, filteredFiles.length, setPageSize]);
-
-  const { quota, loadQuota } = useQuotaLoader(config);
+  }, [effectiveViewMode, columns, sortedFiles.length, setPageSize]);
 
   const pendingQuotaRefreshRef = useRef(false);
   const prevFilesLoadingRef = useRef(loading);
+  const codexBootstrapAttemptRef = useRef<string | null>(null);
+
+  const codexBootstrapKey = useMemo(
+    () => filteredFiles.map((file) => file.name).sort().join('|'),
+    [filteredFiles]
+  );
 
   const handleRefresh = useCallback(() => {
     pendingQuotaRefreshRef.current = true;
     void triggerHeaderRefresh();
   }, []);
+
+  useEffect(() => {
+    codexBootstrapAttemptRef.current = null;
+  }, [codexBootstrapKey]);
+
+  const ensureCodexBootstrapData = useCallback(() => {
+    if (!isCodexSection) return;
+    if (loading || sectionLoading) return;
+    if (filteredFiles.length === 0) return;
+    if (hasCodexBootstrapData) return;
+    if (codexBootstrapAttemptRef.current === codexBootstrapKey) return;
+
+    codexBootstrapAttemptRef.current = codexBootstrapKey;
+    void loadQuota(filteredFiles, 'all', setLoading);
+  }, [
+    codexBootstrapKey,
+    filteredFiles,
+    hasCodexBootstrapData,
+    isCodexSection,
+    loadQuota,
+    loading,
+    sectionLoading,
+    setLoading
+  ]);
 
   useEffect(() => {
     const wasLoading = prevFilesLoadingRef.current;
@@ -180,11 +300,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     if (!wasLoading) return;
 
     pendingQuotaRefreshRef.current = false;
-    const scope = effectiveViewMode === 'all' ? 'all' : 'page';
-    const targets = effectiveViewMode === 'all' ? filteredFiles : pageItems;
-    if (targets.length === 0) return;
-    loadQuota(targets, scope, setLoading);
-  }, [loading, effectiveViewMode, filteredFiles, pageItems, loadQuota, setLoading]);
+    if (filteredFiles.length === 0) return;
+    loadQuota(filteredFiles, 'all', setLoading);
+  }, [filteredFiles, loadQuota, loading, setLoading]);
 
   useEffect(() => {
     if (loading) return;
@@ -203,6 +321,16 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       return nextState;
     });
   }, [filteredFiles, loading, setQuota]);
+
+  const codexWeeklyOverview = useMemo(() => {
+    if (!isCodexSection || !codexQuota) return null;
+    return buildCodexOverviewSummary(filteredFiles, codexQuota, CODEX_WEEKLY_WINDOW_ID);
+  }, [codexQuota, filteredFiles, isCodexSection]);
+
+  const codexCodeReviewOverview = useMemo(() => {
+    if (!isCodexSection || !codexQuota) return null;
+    return buildCodexOverviewSummary(filteredFiles, codexQuota, CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID);
+  }, [codexQuota, filteredFiles, isCodexSection]);
 
   const refreshQuotaForFile = useCallback(
     async (file: AuthFileItem) => {
@@ -237,6 +365,84 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     [config, disabled, quota, setQuota, showNotification, t]
   );
 
+  const renderCodexOverviewCard = useCallback(
+    (
+      summary: CodexOverviewSummary,
+      options: { titleKey: string; emptyKey: string }
+    ) => {
+      const displayPercent =
+        summary.remainingPercent === null ? null : Math.round(summary.remainingPercent);
+      const usedPercent = summary.usedPercent === null ? null : Math.round(summary.usedPercent);
+      const donutStyle: CSSProperties | undefined =
+        displayPercent === null
+          ? undefined
+          : {
+              background: `conic-gradient(
+                color-mix(in srgb, var(--success-color, #22c55e) 88%, white) 0 ${displayPercent}%,
+                color-mix(in srgb, var(--danger-color, #ef4444) 86%, white) ${displayPercent}% 100%
+              )`
+            };
+      const emptyLabel =
+        sectionLoading && summary.includedCount === 0 ? t('common.loading') : t(options.emptyKey);
+
+      return (
+        <div key={options.titleKey} className={styles.codexOverviewCard}>
+          <div className={styles.codexOverviewHeader}>
+            <span className={styles.codexOverviewTitle}>{t(options.titleKey)}</span>
+            <span className={styles.codexOverviewCoverage}>
+              {t('codex_quota.overview_coverage', {
+                included: summary.includedCount,
+                total: summary.totalCount
+              })}
+            </span>
+          </div>
+          <div className={styles.codexOverviewBody}>
+            <div
+              className={`${styles.codexOverviewDonut} ${
+                displayPercent === null ? styles.codexOverviewDonutEmpty : ''
+              }`}
+              style={donutStyle}
+            >
+              <div className={styles.codexOverviewDonutInner}>
+                {displayPercent === null ? (
+                  <span className={styles.codexOverviewEmpty}>{emptyLabel}</span>
+                ) : (
+                  <>
+                    <span className={styles.codexOverviewPercent}>{displayPercent}%</span>
+                    <span className={styles.codexOverviewPercentLabel}>
+                      {t('codex_quota.overview_remaining')}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className={styles.codexOverviewStats}>
+              <div className={styles.codexOverviewStat}>
+                <span className={styles.codexOverviewStatLabel}>
+                  {t('codex_quota.overview_remaining')}
+                </span>
+                <span className={styles.codexOverviewStatValue}>
+                  {displayPercent === null ? '--' : `${displayPercent}%`}
+                </span>
+              </div>
+              <div className={styles.codexOverviewStat}>
+                <span className={styles.codexOverviewStatLabel}>
+                  {t('codex_quota.overview_used')}
+                </span>
+                <span className={styles.codexOverviewStatValue}>
+                  {usedPercent === null ? '--' : `${usedPercent}%`}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    },
+    [sectionLoading, t]
+  );
+
+  const displayedItems = effectiveViewMode === 'all' ? sortedFiles : pageItems;
+
   const titleNode = (
     <div className={styles.titleWrapper}>
       <span>{t(`${config.i18nPrefix}.title`)}</span>
@@ -262,7 +468,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
               className={`${styles.viewModeButton} ${
                 effectiveViewMode === 'paged' ? styles.viewModeButtonActive : ''
               }`}
-              onClick={() => setViewMode('paged')}
+              onClick={() => {
+                ensureCodexBootstrapData();
+                setViewMode('paged');
+              }}
             >
               {t('auth_files.view_mode_paged')}
             </Button>
@@ -273,16 +482,43 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                 effectiveViewMode === 'all' ? styles.viewModeButtonActive : ''
               }`}
               onClick={() => {
-                if (filteredFiles.length > MAX_SHOW_ALL_THRESHOLD) {
-                  setShowTooManyWarning(true);
-                } else {
-                  setViewMode('all');
-                }
+                ensureCodexBootstrapData();
+                setViewMode('all');
               }}
             >
               {t('auth_files.view_mode_all')}
             </Button>
           </div>
+          {isCodexSection && (
+            <div className={styles.sortToggle}>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={`${styles.sortButton} ${
+                  codexSortMode === 'remaining-desc' ? styles.sortButtonActive : ''
+                }`}
+                onClick={() => {
+                  ensureCodexBootstrapData();
+                  setCodexSortMode('remaining-desc');
+                }}
+              >
+                {t('codex_quota.sort_high_to_low')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={`${styles.sortButton} ${
+                  codexSortMode === 'remaining-asc' ? styles.sortButtonActive : ''
+                }`}
+                onClick={() => {
+                  ensureCodexBootstrapData();
+                  setCodexSortMode('remaining-asc');
+                }}
+              >
+                {t('codex_quota.sort_low_to_high')}
+              </Button>
+            </div>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -306,8 +542,20 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         />
       ) : (
         <>
+          {isCodexSection && codexWeeklyOverview && codexCodeReviewOverview && (
+            <div className={styles.codexOverviewRow}>
+              {renderCodexOverviewCard(codexWeeklyOverview, {
+                titleKey: 'codex_quota.overview_weekly_quota',
+                emptyKey: 'codex_quota.overview_weekly_empty'
+              })}
+              {renderCodexOverviewCard(codexCodeReviewOverview, {
+                titleKey: 'codex_quota.overview_code_review_weekly_quota',
+                emptyKey: 'codex_quota.overview_code_review_weekly_empty'
+              })}
+            </div>
+          )}
           <div ref={gridRef} className={config.gridClassName}>
-            {pageItems.map((item) => (
+            {displayedItems.map((item) => (
               <QuotaCard
                 key={item.name}
                 item={item}
@@ -351,16 +599,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             </div>
           )}
         </>
-      )}
-      {showTooManyWarning && (
-        <div className={styles.warningOverlay} onClick={() => setShowTooManyWarning(false)}>
-          <div className={styles.warningModal} onClick={(e) => e.stopPropagation()}>
-            <p>{t('auth_files.too_many_files_warning')}</p>
-            <Button variant="primary" size="sm" onClick={() => setShowTooManyWarning(false)}>
-              {t('common.confirm')}
-            </Button>
-          </div>
-        </div>
       )}
     </Card>
   );
