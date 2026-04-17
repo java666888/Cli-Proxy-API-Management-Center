@@ -22,7 +22,7 @@ import styles from './QuotaPage.module.scss';
 const MOCK_CODEX_QUOTA_STORAGE_KEY = 'quota-page:mock-codex-quota';
 const CAN_USE_MOCK_CODEX_QUOTA = import.meta.env.DEV;
 
-const createMockCodexFiles = (): AuthFileItem[] => [
+const MOCK_CODEX_FILES: AuthFileItem[] = [
   { name: 'codex-pro-20x-a.json', type: 'codex', authIndex: 'mock-codex-1' },
   { name: 'codex-pro-5x-b.json', type: 'codex', authIndex: 'mock-codex-2' },
   { name: 'codex-team-c.json', type: 'codex', authIndex: 'mock-codex-3' },
@@ -31,6 +31,10 @@ const createMockCodexFiles = (): AuthFileItem[] => [
   { name: 'codex-error.json', type: 'codex', authIndex: 'mock-codex-6' },
   { name: 'codex-idle.json', type: 'codex', authIndex: 'mock-codex-7' }
 ];
+
+const MOCK_CODEX_FILE_NAMES = new Set(MOCK_CODEX_FILES.map((file) => file.name));
+
+const createMockCodexFiles = (): AuthFileItem[] => MOCK_CODEX_FILES.map((file) => ({ ...file }));
 
 const createMockCodexQuota = (): Record<string, CodexQuotaState> => ({
   'codex-pro-20x-a.json': {
@@ -220,13 +224,27 @@ export function QuotaPage() {
   useEffect(() => {
     if (!isMockCodexQuotaMode) return;
 
-    setCodexQuota(createMockCodexQuota());
+    setCodexQuota((prev) => ({
+      ...prev,
+      ...createMockCodexQuota()
+    }));
   }, [isMockCodexQuotaMode, setCodexQuota]);
 
   useEffect(() => {
     if (isMockCodexQuotaMode) return;
 
-    setCodexQuota({});
+    setCodexQuota((prev) => {
+      let changed = false;
+      const nextState = { ...prev };
+
+      Object.keys(nextState).forEach((fileName) => {
+        if (!MOCK_CODEX_FILE_NAMES.has(fileName)) return;
+        delete nextState[fileName];
+        changed = true;
+      });
+
+      return changed ? nextState : prev;
+    });
   }, [isMockCodexQuotaMode, setCodexQuota]);
 
   return (
