@@ -29,7 +29,6 @@ type CodexSortMode = 'remaining-desc' | 'remaining-asc';
 
 const MAX_ITEMS_PER_PAGE = 25;
 const CODEX_WEEKLY_WINDOW_ID = 'weekly';
-const CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID = 'code-review-weekly';
 
 interface CodexOverviewSummary {
   remainingPercent: number | null;
@@ -61,19 +60,25 @@ const buildCodexOverviewSummary = (
   windowId: string
 ): CodexOverviewSummary => {
   let includedCount = 0;
+  let windowValueCount = 0;
   let remainingTotal = 0;
 
   files.forEach((file) => {
+    const quota = quotaByFile[file.name];
+    if (quota?.status === 'success') {
+      includedCount += 1;
+    }
+
     const remainingPercent = getRemainingPercentFromUsed(
-      getCodexWindowById(quotaByFile[file.name], windowId)?.usedPercent
+      getCodexWindowById(quota, windowId)?.usedPercent
     );
     if (remainingPercent === null) return;
 
-    includedCount += 1;
+    windowValueCount += 1;
     remainingTotal += remainingPercent;
   });
 
-  if (includedCount === 0) {
+  if (windowValueCount === 0) {
     return {
       remainingPercent: null,
       usedPercent: null,
@@ -82,7 +87,7 @@ const buildCodexOverviewSummary = (
     };
   }
 
-  const averageRemaining = remainingTotal / includedCount;
+  const averageRemaining = remainingTotal / windowValueCount;
   return {
     remainingPercent: averageRemaining,
     usedPercent: 100 - averageRemaining,
@@ -192,10 +197,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
     return filteredFiles.some((file) => {
       const fileQuota = codexQuota[file.name];
-      return Boolean(
-        getCodexWindowById(fileQuota, CODEX_WEEKLY_WINDOW_ID) ||
-          getCodexWindowById(fileQuota, CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID)
-      );
+      return Boolean(getCodexWindowById(fileQuota, CODEX_WEEKLY_WINDOW_ID));
     });
   }, [codexQuota, filteredFiles, isCodexSection]);
 
@@ -327,11 +329,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     return buildCodexOverviewSummary(filteredFiles, codexQuota, CODEX_WEEKLY_WINDOW_ID);
   }, [codexQuota, filteredFiles, isCodexSection]);
 
-  const codexCodeReviewOverview = useMemo(() => {
-    if (!isCodexSection || !codexQuota) return null;
-    return buildCodexOverviewSummary(filteredFiles, codexQuota, CODEX_CODE_REVIEW_WEEKLY_WINDOW_ID);
-  }, [codexQuota, filteredFiles, isCodexSection]);
-
   const refreshQuotaForFile = useCallback(
     async (file: AuthFileItem) => {
       if (disabled || file.disabled) return;
@@ -365,7 +362,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     [config, disabled, quota, setQuota, showNotification, t]
   );
 
-  const renderCodexOverviewCard = useCallback(
+  const renderCodexOverviewInline = useCallback(
     (
       summary: CodexOverviewSummary,
       options: { titleKey: string; emptyKey: string }
@@ -373,67 +370,51 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       const displayPercent =
         summary.remainingPercent === null ? null : Math.round(summary.remainingPercent);
       const usedPercent = summary.usedPercent === null ? null : Math.round(summary.usedPercent);
-      const donutStyle: CSSProperties | undefined =
+      const meterStyle: CSSProperties | undefined =
         displayPercent === null
           ? undefined
           : {
-              background: `conic-gradient(
-                color-mix(in srgb, var(--success-color, #22c55e) 88%, white) 0 ${displayPercent}%,
-                color-mix(in srgb, var(--danger-color, #ef4444) 86%, white) ${displayPercent}% 100%
-              )`
+              width: `${displayPercent}%`
+            };
+      const usedMeterStyle: CSSProperties | undefined =
+        usedPercent === null
+          ? undefined
+          : {
+              width: `${usedPercent}%`
             };
       const emptyLabel =
         sectionLoading && summary.includedCount === 0 ? t('common.loading') : t(options.emptyKey);
 
       return (
-        <div key={options.titleKey} className={styles.codexOverviewCard}>
-          <div className={styles.codexOverviewHeader}>
-            <span className={styles.codexOverviewTitle}>{t(options.titleKey)}</span>
-            <span className={styles.codexOverviewCoverage}>
+        <div key={options.titleKey} className={styles.codexOverviewInline}>
+          <div className={styles.codexOverviewInlineMeta}>
+            <span className={styles.codexOverviewInlineTitle}>{t(options.titleKey)}</span>
+            <span className={styles.codexOverviewInlineCoverage}>
               {t('codex_quota.overview_coverage', {
                 included: summary.includedCount,
                 total: summary.totalCount
               })}
             </span>
           </div>
-          <div className={styles.codexOverviewBody}>
-            <div
-              className={`${styles.codexOverviewDonut} ${
-                displayPercent === null ? styles.codexOverviewDonutEmpty : ''
-              }`}
-              style={donutStyle}
-            >
-              <div className={styles.codexOverviewDonutInner}>
-                {displayPercent === null ? (
-                  <span className={styles.codexOverviewEmpty}>{emptyLabel}</span>
-                ) : (
-                  <>
-                    <span className={styles.codexOverviewPercent}>{displayPercent}%</span>
-                    <span className={styles.codexOverviewPercentLabel}>
-                      {t('codex_quota.overview_remaining')}
-                    </span>
-                  </>
-                )}
-              </div>
+          <div className={styles.codexOverviewInlineMeter}>
+            <div className={styles.codexOverviewInlineTrack}>
+              {displayPercent !== null && (
+                <span className={styles.codexOverviewInlineRemaining} style={meterStyle} />
+              )}
+              {usedPercent !== null && (
+                <span className={styles.codexOverviewInlineUsed} style={usedMeterStyle} />
+              )}
             </div>
-            <div className={styles.codexOverviewStats}>
-              <div className={styles.codexOverviewStat}>
-                <span className={styles.codexOverviewStatLabel}>
-                  {t('codex_quota.overview_remaining')}
-                </span>
-                <span className={styles.codexOverviewStatValue}>
-                  {displayPercent === null ? '--' : `${displayPercent}%`}
-                </span>
-              </div>
-              <div className={styles.codexOverviewStat}>
-                <span className={styles.codexOverviewStatLabel}>
-                  {t('codex_quota.overview_used')}
-                </span>
-                <span className={styles.codexOverviewStatValue}>
-                  {usedPercent === null ? '--' : `${usedPercent}%`}
-                </span>
-              </div>
-            </div>
+          </div>
+          <div className={styles.codexOverviewInlineValues}>
+            <span className={styles.codexOverviewInlineRemainingText}>
+              <strong>{displayPercent === null ? emptyLabel : `${displayPercent}%`}</strong>
+              {t('codex_quota.overview_remaining')}
+            </span>
+            <span className={styles.codexOverviewInlineUsedText}>
+              <strong>{usedPercent === null ? '--' : `${usedPercent}%`}</strong>
+              {t('codex_quota.overview_used')}
+            </span>
           </div>
         </div>
       );
@@ -445,12 +426,20 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   const titleNode = (
     <div className={styles.titleWrapper}>
-      <span>{t(`${config.i18nPrefix}.title`)}</span>
-      {filteredFiles.length > 0 && (
-        <span className={styles.countBadge}>
-          {filteredFiles.length}
-        </span>
-      )}
+      <div className={styles.titleIdentity}>
+        <span>{t(`${config.i18nPrefix}.title`)}</span>
+        {filteredFiles.length > 0 && (
+          <span className={styles.countBadge}>
+            {filteredFiles.length}
+          </span>
+        )}
+      </div>
+      {isCodexSection &&
+        codexWeeklyOverview &&
+        renderCodexOverviewInline(codexWeeklyOverview, {
+          titleKey: 'codex_quota.overview_weekly_quota',
+          emptyKey: 'codex_quota.overview_weekly_empty'
+        })}
     </div>
   );
 
@@ -542,18 +531,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         />
       ) : (
         <>
-          {isCodexSection && codexWeeklyOverview && codexCodeReviewOverview && (
-            <div className={styles.codexOverviewRow}>
-              {renderCodexOverviewCard(codexWeeklyOverview, {
-                titleKey: 'codex_quota.overview_weekly_quota',
-                emptyKey: 'codex_quota.overview_weekly_empty'
-              })}
-              {renderCodexOverviewCard(codexCodeReviewOverview, {
-                titleKey: 'codex_quota.overview_code_review_weekly_quota',
-                emptyKey: 'codex_quota.overview_code_review_weekly_empty'
-              })}
-            </div>
-          )}
           <div ref={gridRef} className={config.gridClassName}>
             {displayedItems.map((item) => (
               <QuotaCard
