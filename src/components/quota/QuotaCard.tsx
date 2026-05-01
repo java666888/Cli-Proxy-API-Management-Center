@@ -137,10 +137,22 @@ export function QuotaCard<TState extends QuotaStatusState>({
             <div className={styles.quotaMessage}>{t(idleMessageKey)}</div>
           )
         ) : quotaStatus === 'error' ? (
-          <div className={styles.quotaError}>
-            {t(`${i18nPrefix}.load_failed`, {
-              message: quotaErrorMessage
-            })}
+          <div className={styles.quotaErrorBlock}>
+            <div className={styles.quotaError}>
+              {t(`${i18nPrefix}.load_failed`, {
+                message: quotaErrorMessage
+              })}
+            </div>
+            {onRefresh && (
+              <button
+                type="button"
+                className={styles.quotaErrorRefreshButton}
+                onClick={onRefresh}
+                disabled={!canRefresh}
+              >
+                {t(`${i18nPrefix}.refresh_button`)}
+              </button>
+            )}
           </div>
         ) : quota ? (
           renderQuotaItems(quota, t, { styles, QuotaProgressBar })
