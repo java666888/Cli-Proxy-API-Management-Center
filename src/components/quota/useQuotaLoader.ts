@@ -15,6 +15,8 @@ type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaSetter<T> = (updater: QuotaUpdater<T>) => void;
 
+const ALL_SCOPE_BATCH_SIZE = 10;
+
 interface LoadQuotaResult<TData> {
   name: string;
   status: 'success' | 'error';
@@ -22,6 +24,16 @@ interface LoadQuotaResult<TData> {
   error?: string;
   errorStatus?: number;
 }
+
+const chunkTargets = (targets: AuthFileItem[], batchSize: number): AuthFileItem[][] => {
+  const chunks: AuthFileItem[][] = [];
+
+  for (let index = 0; index < targets.length; index += batchSize) {
+    chunks.push(targets.slice(index, index + batchSize));
+  }
+
+  return chunks;
+};
 
 export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>) {
   const { t } = useTranslation();
@@ -55,35 +67,40 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
           return nextState;
         });
 
-        const results = await Promise.all(
-          targets.map(async (file): Promise<LoadQuotaResult<TData>> => {
-            try {
-              const data = await config.fetchQuota(file, t);
-              return { name: file.name, status: 'success', data };
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : t('common.unknown_error');
-              const errorStatus = getStatusFromError(err);
-              return { name: file.name, status: 'error', error: message, errorStatus };
-            }
-          })
-        );
+        const targetBatches =
+          scope === 'all' ? chunkTargets(targets, ALL_SCOPE_BATCH_SIZE) : [targets];
 
-        if (requestId !== requestIdRef.current) return;
+        for (const targetBatch of targetBatches) {
+          const results = await Promise.all(
+            targetBatch.map(async (file): Promise<LoadQuotaResult<TData>> => {
+              try {
+                const data = await config.fetchQuota(file, t);
+                return { name: file.name, status: 'success', data };
+              } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : t('common.unknown_error');
+                const errorStatus = getStatusFromError(err);
+                return { name: file.name, status: 'error', error: message, errorStatus };
+              }
+            })
+          );
 
-        setQuota((prev) => {
-          const nextState = { ...prev };
-          results.forEach((result) => {
-            if (result.status === 'success') {
-              nextState[result.name] = config.buildSuccessState(result.data as TData);
-            } else {
-              nextState[result.name] = config.buildErrorState(
-                result.error || t('common.unknown_error'),
-                result.errorStatus
-              );
-            }
+          if (requestId !== requestIdRef.current) return;
+
+          setQuota((prev) => {
+            const nextState = { ...prev };
+            results.forEach((result) => {
+              if (result.status === 'success') {
+                nextState[result.name] = config.buildSuccessState(result.data as TData);
+              } else {
+                nextState[result.name] = config.buildErrorState(
+                  result.error || t('common.unknown_error'),
+                  result.errorStatus
+                );
+              }
+            });
+            return nextState;
           });
-          return nextState;
-        });
+        }
       } finally {
         if (requestId === requestIdRef.current) {
           setLoading(false);
